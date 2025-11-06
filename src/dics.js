@@ -33,7 +33,8 @@ let defaultOptions = {
     // Change the bacground-color of sections texts with an array |`['#000000', '#FFFFFF']`|
     arrayColorText: null,
     // Change the color of texts with an array  |`['#FFFFFF', '#000000']`|
-    linesColor: null // Change the lines and arrows color  |`'rgb(0,0,0)'`|
+    linesColor: null, // Change the lines and arrows color  |`'rgb(0,0,0)'`|
+    onLoaded: function() {}
 
 };
 /**
@@ -69,11 +70,13 @@ let Dics = function (options) {
 Dics.prototype._load = function (firstImage, maxCounter = 100000) {
     if (firstImage.naturalWidth) {
         this._buidAfterFirstImageLoad(firstImage);
+        this.options.onLoaded.call();
 
         window.addEventListener("resize", () => {
             this._setContainerWidth(firstImage);
 
             this._resetSizes();
+            this.options.onLoaded.call();
         });
     } else {
         if (maxCounter > 0) {
