@@ -25,6 +25,7 @@ let defaultOptions = {
     // Show text only when you hover the image container |`true`,`false`|
     textPosition: "top",
     // Set the prefer text position  |`'center'`,`'top'`, `'right'`, `'bottom'`, `'left'` |
+    sliderPosition: 0.3,
     linesOrientation: "horizontal",
     // Change the orientation of lines  |`'horizontal'`,`'vertical'` |
     rotate: 0,
@@ -48,6 +49,7 @@ let Dics = function (options) {
         clearEmpty: true
     });
     this.container = this.options.container;
+    this._activeSlider = 0;
 
     if (this.container == null) {
         console.error("Container element not found!");
@@ -125,21 +127,48 @@ Dics.prototype._setOpacityContainerForLoading = function (opacity) {
  * @private
  */
 
-
 Dics.prototype._resetSizes = function () {
     let dics = this;
     let imagesLength = dics.images.length;
-    let initialImagesContainerWidth = dics.container.getBoundingClientRect()[dics.config.sizeField] / imagesLength;
+    let containerSize = dics.container.getBoundingClientRect()[dics.config.sizeField];
+    
+    // 重新计算各 section 宽度（与 _build 中的逻辑相同）
+    let sectionWidths = [];
+    let firstSliderPosition = containerSize * dics.options.sliderPosition;
+    
+    sectionWidths[0] = firstSliderPosition;
+    let remainingWidth = containerSize - firstSliderPosition;
+    let remainingSections = imagesLength - 1;
+    
+    for (let i = 1; i < imagesLength; i++) {
+        if (i === imagesLength - 1) {
+            sectionWidths[i] = remainingWidth - ((remainingSections - 1) * Math.floor(remainingWidth / remainingSections));
+        } else {
+            sectionWidths[i] = Math.floor(remainingWidth / remainingSections);
+        }
+    }
+ 
     const sections$$ = dics.container.querySelectorAll("[data-function='b-dics__section']");
-
+    const sliders$$ = dics.container.querySelectorAll(".b-dics__slider");
+ 
     for (let i = 0; i < sections$$.length; i++) {
         let section$$ = sections$$[i];
-        section$$.style.flex = `0 0 ${initialImagesContainerWidth}px`;
-        section$$.querySelector(".b-dics__image").style[this.config.positionField] = `${i * -initialImagesContainerWidth}px`;
-        const slider$$ = section$$.querySelector(".b-dics__slider");
-
-        if (slider$$) {
-            slider$$.style[this.config.positionField] = `${initialImagesContainerWidth * (i + 1)}px`;
+        section$$.style.flex = `0 0 ${sectionWidths[i]}px`;
+        
+        // 设置图片位置
+        let imagePosition = 0;
+        for (let j = 0; j < i; j++) {
+            imagePosition += sectionWidths[j];
+        }
+        section$$.querySelector(".b-dics__image").style[dics.config.positionField] = `-${imagePosition}px`;
+        
+        // 设置 slider 位置
+        if (i < sliders$$.length) {
+            let sliderPosition = 0;
+            for (let j = 0; j <= i; j++) {
+                sliderPosition += sectionWidths[j];
+            }
+            sliders$$[i].style[dics.config.positionField] = `${sliderPosition}px`;
         }
     }
 };
@@ -148,46 +177,79 @@ Dics.prototype._resetSizes = function () {
  * @private
  */
 
-
 Dics.prototype._build = function () {
     let dics = this;
-
     dics._applyGlobalClass(dics.options);
-
+ 
     let imagesLength = dics.images.length;
-    let initialImagesContainerWidth = dics.container.getBoundingClientRect()[dics.config.sizeField] / imagesLength;
-
+    let containerSize = dics.container.getBoundingClientRect()[dics.config.sizeField];
+    
+    // 根据 sliderPosition 计算各个 section 的宽度
+    let sectionWidths = [];
+    let firstSliderPosition = containerSize * dics.options.sliderPosition;
+    
+    // 第一个 section 的宽度
+    sectionWidths[0] = firstSliderPosition;
+    
+    // 剩余部分平均分配
+    let remainingWidth = containerSize - firstSliderPosition;
+    let remainingSections = imagesLength - 1;
+    
+    for (let i = 1; i < imagesLength; i++) {
+        if (i === imagesLength - 1) {
+            // 最后一个 section 占用剩余的所有宽度
+            sectionWidths[i] = remainingWidth - ((remainingSections - 1) * Math.floor(remainingWidth / remainingSections));
+        } else {
+            sectionWidths[i] = Math.floor(remainingWidth / remainingSections);
+        }
+    }
+ 
     for (let i = 0; i < imagesLength; i++) {
         let image = dics.images[i];
-
         let section = dics._createElement("div", "b-dics__section");
-
         let imageContainer = dics._createElement("div", "b-dics__image-container");
-
-        let slider = dics._createSlider(i, initialImagesContainerWidth);
-
-        dics._createAltText(image, i, imageContainer);
-
-        dics._applyFilter(image, i, dics.options.filters);
-
-        dics._rotate(image, imageContainer);
-
+ 
         section.setAttribute("data-function", "b-dics__section");
-        section.style.flex = `0 0 ${initialImagesContainerWidth}px`;
+        section.style.flex = `0 0 ${sectionWidths[i]}px`;
+        
+        dics._createAltText(image, i, imageContainer);
+        dics._applyFilter(image, i, dics.options.filters);
+        dics._rotate(image, imageContainer);
+        
         image.classList.add("b-dics__image");
         section.appendChild(imageContainer);
         imageContainer.appendChild(image);
-
+ 
+        // 只有最后一个 section 不添加 slider
         if (i < imagesLength - 1) {
+            // 计算当前 slider 的累积位置
+            let sliderPosition = 0;
+            for (let j = 0; j <= i; j++) {
+                sliderPosition += sectionWidths[j];
+            }
+            
+            let slider = dics._createSlider(i, sliderPosition);
+
+            // 默认激活第一个 slider
+            if (i === 0) {
+                slider.classList.add("b-dics__slider--active");
+                dics._activeSlider = 0;
+            }
+
             section.appendChild(slider);
         }
-
+ 
         dics.container.appendChild(section);
-        image.style[this.config.positionField] = `${i * -initialImagesContainerWidth}px`;
+        
+        // 设置图片位置
+        let imagePosition = 0;
+        for (let j = 0; j < i; j++) {
+            imagePosition += sectionWidths[j];
+        }
+        image.style[dics.config.positionField] = `-${imagePosition}px`;
     }
-
+ 
     this.sections = this._getSections();
-
     this._setOpacityContainerForLoading(1);
 };
 /**
@@ -240,23 +302,24 @@ Dics.prototype._setEvents = function () {
 
     let listener = function (event) {
         let xPageCoord = event.pageX ? event.pageX : event.touches[0].pageX;
-
+     
         if (xPageCoord < oldx) {
             dics._isGoingRight = false;
         } else if (xPageCoord > oldx) {
             dics._isGoingRight = true;
         }
-
+     
         oldx = xPageCoord;
-
+     
         let position = dics._calcPosition(event);
-
         let beforeSectionsWidth = dics._beforeSectionsWidth(dics.sections, dics.images, dics._activeSlider);
-
         let calcMovePixels = position - beforeSectionsWidth;
-        dics.sliders[dics._activeSlider].style[dics.config.positionField] = `${position}px`;
-
-        dics._pushSections(calcMovePixels, position);
+        
+        // 添加安全检查
+        if (dics._activeSlider !== null && dics._activeSlider !== undefined && dics.sliders[dics._activeSlider]) {
+            dics.sliders[dics._activeSlider].style[dics.config.positionField] = `${position}px`;
+            dics._pushSections(calcMovePixels, position);
+        }
     };
 
     dics.container.addEventListener("click", listener);
@@ -264,6 +327,10 @@ Dics.prototype._setEvents = function () {
     for (let i = 0; i < dics.sliders.length; i++) {
         let slider = dics.sliders[i];
         utils.setMultiEvents(slider, ["mousedown", "touchstart"], function (event) {
+            // 移除之前的激活状态
+            for (let j = 0; j < dics.sliders.length; j++) {
+                dics.sliders[j].classList.remove("b-dics__slider--active");
+            }
             dics._activeSlider = i;
             dics._clickPosition = dics._calcPosition(event);
             slider.classList.add("b-dics__slider--active");
@@ -325,15 +392,18 @@ Dics.prototype._calcContainerHeight = function (firstImage) {
  * @private
  */
 
-
 Dics.prototype._setLeftToImages = function (sections, images) {
     let size = 0;
-
+ 
     for (let i = 0; i < images.length; i++) {
         let image = images[i];
         image.style[this.config.positionField] = `-${size}px`;
         size += sections[i].getBoundingClientRect()[this.config.sizeField];
-        this.sliders[i].style[this.config.positionField] = `${size}px`;
+        
+        // 只为存在的 slider 设置位置（最后一个 image 没有 slider）
+        if (i < this.sliders.length) {
+            this.sliders[i].style[this.config.positionField] = `${size}px`;
+        }
     }
 };
 /**
@@ -341,13 +411,17 @@ Dics.prototype._setLeftToImages = function (sections, images) {
  * @private
  */
 
-
 Dics.prototype._disableImageDrag = function () {
+    // 为所有 images 添加 drag 事件
     for (let i = 0; i < this.images.length; i++) {
-        this.sliders[i].addEventListener("dragstart", function (e) {
+        this.images[i].addEventListener("dragstart", function (e) {
             e.preventDefault();
         });
-        this.images[i].addEventListener("dragstart", function (e) {
+    }
+    
+    // 只为存在的 sliders 添加 drag 事件
+    for (let i = 0; i < this.sliders.length; i++) {
+        this.sliders[i].addEventListener("dragstart", function (e) {
             e.preventDefault();
         });
     }
@@ -395,14 +469,15 @@ Dics.prototype._applyGlobalClass = function (options) {
     }
 };
 
-Dics.prototype._createSlider = function (i, initialImagesContainerWidth) {
+Dics.prototype._createSlider = function (i, sliderPosition) {
     let slider = this._createElement("div", "b-dics__slider");
-
+    
     if (this.options.linesColor) {
         slider.style.color = this.options.linesColor;
     }
-
-    slider.style[this.config.positionField] = `${initialImagesContainerWidth * (i + 1)}px`;
+ 
+    // 直接使用传入的 sliderPosition
+    slider.style[this.config.positionField] = `${sliderPosition}px`;
     this.sliders.push(slider);
     return slider;
 };
